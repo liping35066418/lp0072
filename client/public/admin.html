@@ -1,0 +1,918 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>陶土工坊 - 管理后台</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/zh.js"></script>
+<style>
+  .gradient-bg { background: linear-gradient(135deg, #1e3a8a 0%, #6d28d9 100%); }
+  .side-gradient { background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%); }
+  .status-badge { padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 500; }
+  .drag-item { cursor: grab; transition: all 0.2s; }
+  .drag-item:active { cursor: grabbing; }
+  .drag-item.dragging { opacity: 0.4; transform: scale(0.95); }
+  .drop-zone { transition: all 0.2s; min-height: 80px; }
+  .drop-zone.drag-over { background: rgba(99, 102, 241, 0.1); border-color: #6366f1; border-style: dashed; }
+  .drop-zone.over-limit { background: rgba(239, 68, 68, 0.1); border-color: #ef4444; }
+  .sidebar-item { transition: all 0.2s; }
+  .sidebar-item:hover { background: rgba(255,255,255,0.08); }
+  .sidebar-item.active { background: rgba(99, 102, 241, 0.3); border-left: 3px solid #818cf8; }
+  .modal-overlay { background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); }
+  .toast { animation: slideIn 0.3s ease; }
+  @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+  .pulse-firing { animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(168, 85, 247, 0.4); } 50% { box-shadow: 0 0 0 12px rgba(168, 85, 247, 0); } }
+  .scrollbar-thin::-webkit-scrollbar { width: 6px; }
+  .scrollbar-thin::-webkit-scrollbar-track { background: #f1f5f9; }
+  .scrollbar-thin::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+</style>
+</head>
+<body class="bg-slate-100 min-h-screen flex">
+
+<aside class="side-gradient w-64 text-white flex flex-col min-h-screen">
+  <div class="p-6 border-b border-white/10">
+    <div class="flex items-center space-x-3">
+      <div class="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-xl flex items-center justify-center text-xl">🏺</div>
+      <div>
+        <h1 class="font-bold text-lg">陶土工坊</h1>
+        <p class="text-xs text-white/60">烧制调度管理系统</p>
+      </div>
+    </div>
+  </div>
+  <nav class="flex-1 p-4 space-y-1">
+    <button onclick="switchView('dashboard')" class="sidebar-btn sidebar-item active w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-left">
+      <span class="text-xl">📊</span><span>数据概览</span>
+    </button>
+    <button onclick="switchView('scheduler')" class="sidebar-btn sidebar-item w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-left">
+      <span class="text-xl">🔥</span><span>烧制调度</span>
+    </button>
+    <button onclick="switchView('bodies')" class="sidebar-btn sidebar-item w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-left">
+      <span class="text-xl">📦</span><span>坯体管理</span>
+    </button>
+    <button onclick="switchView('kilns')" class="sidebar-btn sidebar-item w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-left">
+      <span class="text-xl">🏭</span><span>窑炉管理</span>
+    </button>
+    <button onclick="switchView('defects')" class="sidebar-btn sidebar-item w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-left">
+      <span class="text-xl">⚠️</span><span>瑕疵与补烧</span>
+    </button>
+    <button onclick="switchView('stats')" class="sidebar-btn sidebar-item w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-left">
+      <span class="text-xl">📈</span><span>统计分析</span>
+    </button>
+  </nav>
+  <div class="p-4 border-t border-white/10">
+    <a href="/" class="sidebar-item w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-white/70 hover:text-white">
+      <span>🏪</span><span>返回顾客前台</span>
+    </a>
+  </div>
+</aside>
+
+<main class="flex-1 flex flex-col min-h-screen">
+  <header class="bg-white shadow-sm px-8 py-4 flex items-center justify-between">
+    <div>
+      <h2 id="viewTitle" class="text-2xl font-bold text-slate-800">数据概览</h2>
+      <p id="viewSubtitle" class="text-sm text-slate-500">实时掌握工坊运营状态</p>
+    </div>
+    <div class="flex items-center space-x-4">
+      <div class="relative">
+        <button onclick="toggleNotif()" class="relative p-2 rounded-lg hover:bg-slate-100 transition">
+          <span class="text-xl">🔔</span>
+          <span id="notifBadge" class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center hidden">0</span>
+        </button>
+        <div id="notifDropdown" class="hidden absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-2xl border z-50 overflow-hidden">
+          <div class="px-4 py-3 border-b bg-slate-50 flex items-center justify-between">
+            <span class="font-semibold">认领提醒</span>
+            <button onclick="markAllRead()" class="text-xs text-purple-600 hover:text-purple-800">全部已读</button>
+          </div>
+          <div id="notifList" class="max-h-64 overflow-y-auto scrollbar-thin"></div>
+        </div>
+      </div>
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white font-bold">管</div>
+        <div class="text-sm"><div class="font-medium text-slate-800">工坊管理员</div><div class="text-slate-500">管理员</div></div>
+      </div>
+    </div>
+  </header>
+
+  <div class="flex-1 p-8 overflow-y-auto scrollbar-thin">
+
+    <section id="view-dashboard" class="view-content">
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-6 mb-8">
+        <div class="bg-white rounded-2xl p-6 shadow-sm border-l-4 border-purple-500">
+          <div class="flex items-center justify-between mb-3"><span class="text-sm text-slate-500">总坯体数</span><span class="text-2xl">📦</span></div>
+          <div id="statTotal" class="text-3xl font-bold text-slate-800">-</div>
+        </div>
+        <div class="bg-white rounded-2xl p-6 shadow-sm border-l-4 border-blue-500">
+          <div class="flex items-center justify-between mb-3"><span class="text-sm text-slate-500">待排期</span><span class="text-2xl">📋</span></div>
+          <div id="statRegistered" class="text-3xl font-bold text-blue-600">-</div>
+        </div>
+        <div class="bg-white rounded-2xl p-6 shadow-sm border-l-4 border-purple-500 pulse-firing">
+          <div class="flex items-center justify-between mb-3"><span class="text-sm text-slate-500">烧制中</span><span class="text-2xl">🔥</span></div>
+          <div id="statFiring" class="text-3xl font-bold text-purple-600">-</div>
+        </div>
+        <div class="bg-white rounded-2xl p-6 shadow-sm border-l-4 border-green-500">
+          <div class="flex items-center justify-between mb-3"><span class="text-sm text-slate-500">待认领</span><span class="text-2xl">✅</span></div>
+          <div id="statReady" class="text-3xl font-bold text-green-600">-</div>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        <div class="bg-white rounded-2xl p-6 shadow-sm">
+          <h3 class="font-bold text-slate-800 mb-4 flex items-center space-x-2"><span>🏭</span><span>窑炉利用率</span></h3>
+          <div id="kilnUtilList" class="space-y-4"></div>
+        </div>
+        <div class="bg-white rounded-2xl p-6 shadow-sm">
+          <h3 class="font-bold text-slate-800 mb-4 flex items-center space-x-2"><span>🎨</span><span>釉色分布</span></h3>
+          <canvas id="glazeChart" height="200"></canvas>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-2xl p-6 shadow-sm">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="font-bold text-slate-800 flex items-center space-x-2"><span>🕒</span><span>最近坯体登记</span></h3>
+          <button onclick="switchView('bodies')" class="text-sm text-purple-600 hover:text-purple-800">查看全部 →</button>
+        </div>
+        <div id="recentBodies" class="space-y-2"></div>
+      </div>
+    </section>
+
+    <section id="view-scheduler" class="view-content hidden">
+      <div class="bg-white rounded-2xl p-4 mb-6 shadow-sm">
+        <div class="flex flex-wrap items-center gap-4">
+          <div class="flex items-center space-x-2">
+            <label class="text-sm text-slate-600">筛选：</label>
+            <select id="filterStatus" onchange="refreshScheduler()" class="px-3 py-2 border rounded-lg text-sm">
+              <option value="">全部</option>
+              <option value="registered">已登记(未排)</option>
+              <option value="refire_needed">需补烧</option>
+            </select>
+          </div>
+          <input id="filterKw" type="text" placeholder="搜索姓名/电话/作品名" class="px-3 py-2 border rounded-lg text-sm" oninput="refreshScheduler()">
+          <div class="ml-auto flex space-x-2">
+            <button onclick="refreshScheduler()" class="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition">🔄 刷新</button>
+            <button onclick="saveReorder()" class="px-4 py-2 gradient-bg text-white rounded-lg text-sm font-medium hover:opacity-90 transition">💾 保存排期</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        <div class="lg:col-span-1">
+          <div class="bg-white rounded-2xl shadow-sm overflow-hidden sticky top-0">
+            <div class="bg-gradient-to-r from-slate-700 to-slate-800 px-5 py-4 text-white">
+              <h3 class="font-bold flex items-center space-x-2"><span>📋</span><span>待排坯体池</span></h3>
+              <p id="poolCount" class="text-xs text-white/70 mt-1">共 0 件（拖拽到右侧窑炉）</p>
+            </div>
+            <div id="bodyPool" class="drop-zone p-3 max-h-[calc(100vh-300px)] overflow-y-auto scrollbar-thin space-y-2"
+                 ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDropPool(event)"></div>
+          </div>
+        </div>
+        <div class="lg:col-span-3">
+          <div id="kilnsContainer" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6"></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="view-bodies" class="view-content hidden">
+      <div class="bg-white rounded-2xl p-4 mb-6 shadow-sm">
+        <div class="flex flex-wrap items-center gap-4">
+          <select id="bodyFilterStatus" onchange="loadBodies()" class="px-3 py-2 border rounded-lg text-sm">
+            <option value="">全部状态</option>
+            <option value="registered">已登记</option>
+            <option value="scheduled">已排期</option>
+            <option value="firing">烧制中</option>
+            <option value="ready">待认领</option>
+            <option value="claimed">已领取</option>
+            <option value="refire_needed">需补烧</option>
+          </select>
+          <input id="bodyFilterKw" type="text" placeholder="搜索..." class="px-3 py-2 border rounded-lg text-sm" oninput="loadBodies()">
+          <button onclick="loadBodies()" class="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition">🔄 刷新</button>
+          <div class="ml-auto"><button onclick="openBodyForm()" class="px-4 py-2 gradient-bg text-white rounded-lg text-sm font-medium hover:opacity-90 transition">+ 新增坯体</button></div>
+        </div>
+      </div>
+      <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+        <table class="w-full text-sm">
+          <thead class="bg-slate-50 text-slate-600">
+            <tr>
+              <th class="text-left px-6 py-4 font-medium">ID</th>
+              <th class="text-left px-6 py-4 font-medium">作品</th>
+              <th class="text-left px-6 py-4 font-medium">顾客信息</th>
+              <th class="text-left px-6 py-4 font-medium">釉色</th>
+              <th class="text-left px-6 py-4 font-medium">状态</th>
+              <th class="text-left px-6 py-4 font-medium">排期</th>
+              <th class="text-left px-6 py-4 font-medium">操作</th>
+            </tr>
+          </thead>
+          <tbody id="bodiesTable"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="view-kilns" class="view-content hidden">
+      <div class="flex justify-between items-center mb-6">
+        <p class="text-slate-600">管理工坊内的所有窑炉信息及容量</p>
+        <button onclick="openKilnForm()" class="px-6 py-3 gradient-bg text-white rounded-lg font-medium hover:opacity-90 transition">+ 新增窑炉</button>
+      </div>
+      <div id="kilnsManage" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+    </section>
+
+    <section id="view-defects" class="view-content hidden">
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+        <div class="bg-white rounded-2xl p-6 shadow-sm">
+          <div class="flex items-center justify-between mb-2"><span class="text-sm text-slate-500">瑕疵总数</span><span class="text-2xl">⚠️</span></div>
+          <div id="defectTotal" class="text-3xl font-bold text-orange-600">-</div>
+        </div>
+        <div class="bg-white rounded-2xl p-6 shadow-sm">
+          <div class="flex items-center justify-between mb-2"><span class="text-sm text-slate-500">需补烧</span><span class="text-2xl">🔥</span></div>
+          <div id="refireTotal" class="text-3xl font-bold text-red-600">-</div>
+        </div>
+        <div class="bg-white rounded-2xl p-6 shadow-sm">
+          <div class="flex items-center justify-between mb-2"><span class="text-sm text-slate-500">轻微瑕疵</span><span class="text-2xl">✨</span></div>
+          <div id="minorTotal" class="text-3xl font-bold text-green-600">-</div>
+        </div>
+      </div>
+      <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+        <div class="px-6 py-4 border-b flex items-center justify-between">
+          <h3 class="font-bold text-slate-800">瑕疵记录列表</h3>
+          <button onclick="openDefectForm()" class="px-4 py-2 gradient-bg text-white rounded-lg text-sm font-medium hover:opacity-90 transition">+ 登记瑕疵</button>
+        </div>
+        <div id="defectsTable" class="divide-y"></div>
+      </div>
+    </section>
+
+    <section id="view-stats" class="view-content hidden">
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        <div class="bg-white rounded-2xl p-6 shadow-sm">
+          <h3 class="font-bold text-slate-800 mb-4">各釉色烧制频次统计</h3>
+          <canvas id="glazeBarChart" height="250"></canvas>
+        </div>
+        <div class="bg-white rounded-2xl p-6 shadow-sm">
+          <h3 class="font-bold text-slate-800 mb-4">作品状态分布</h3>
+          <canvas id="statusPieChart" height="250"></canvas>
+        </div>
+      </div>
+      <div class="bg-white rounded-2xl p-6 shadow-sm">
+        <h3 class="font-bold text-slate-800 mb-4">釉色详细统计</h3>
+        <table class="w-full text-sm">
+          <thead class="bg-slate-50 text-slate-600">
+            <tr>
+              <th class="text-left px-4 py-3 font-medium">釉色</th>
+              <th class="text-left px-4 py-3 font-medium">总件数</th>
+              <th class="text-left px-4 py-3 font-medium">已烧制</th>
+              <th class="text-left px-4 py-3 font-medium">占比</th>
+            </tr>
+          </thead>
+          <tbody id="glazeStatsTable"></tbody>
+        </table>
+      </div>
+    </section>
+
+  </div>
+</main>
+
+<div id="bodyFormModal" class="fixed inset-0 modal-overlay z-50 hidden items-center justify-center">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-xl mx-4">
+    <div class="px-6 py-4 border-b flex items-center justify-between">
+      <h3 id="bodyFormTitle" class="text-lg font-bold">坯体信息</h3>
+      <button onclick="closeModal('bodyFormModal')" class="text-gray-400 hover:text-gray-600 text-2xl">×</button>
+    </div>
+    <form id="bodyForm" class="p-6 grid grid-cols-2 gap-4 max-h-[70vh] overflow-y-auto scrollbar-thin">
+      <input type="hidden" name="id">
+      <div><label class="block text-sm font-medium text-gray-700 mb-1">姓名 *</label><input name="customer_name" required class="w-full px-3 py-2 border rounded-lg"></div>
+      <div><label class="block text-sm font-medium text-gray-700 mb-1">电话 *</label><input name="customer_phone" required class="w-full px-3 py-2 border rounded-lg"></div>
+      <div><label class="block text-sm font-medium text-gray-700 mb-1">作品名 *</label><input name="body_name" required class="w-full px-3 py-2 border rounded-lg"></div>
+      <div><label class="block text-sm font-medium text-gray-700 mb-1">釉色 *</label>
+        <select name="glaze_color" required class="w-full px-3 py-2 border rounded-lg">
+          <option>青瓷</option><option>青花瓷</option><option>钧瓷</option><option>汝瓷</option>
+          <option>黑陶</option><option>白瓷</option><option>粉彩</option><option>釉里红</option><option>其他</option>
+        </select>
+      </div>
+      <div><label class="block text-sm font-medium text-gray-700 mb-1">重量(kg)</label><input name="weight" type="number" step="0.01" class="w-full px-3 py-2 border rounded-lg"></div>
+      <div><label class="block text-sm font-medium text-gray-700 mb-1">状态</label>
+        <select name="status" class="w-full px-3 py-2 border rounded-lg">
+          <option value="registered">已登记</option><option value="scheduled">已排期</option><option value="firing">烧制中</option>
+          <option value="ready">待认领</option><option value="claimed">已领取</option><option value="refire_needed">需补烧</option>
+        </select>
+      </div>
+      <div class="col-span-2"><label class="block text-sm font-medium text-gray-700 mb-1">排期日期</label><input id="bfDate" name="schedule_date" class="w-full px-3 py-2 border rounded-lg"></div>
+      <div class="col-span-2"><label class="block text-sm font-medium text-gray-700 mb-1">备注</label><textarea name="notes" rows="2" class="w-full px-3 py-2 border rounded-lg resize-none"></textarea></div>
+      <div class="col-span-2 flex justify-end space-x-3 pt-4 border-t">
+        <button type="button" onclick="closeModal('bodyFormModal')" class="px-6 py-2 border rounded-lg hover:bg-gray-50">取消</button>
+        <button type="submit" class="px-6 py-2 gradient-bg text-white rounded-lg font-medium hover:opacity-90">保存</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div id="kilnFormModal" class="fixed inset-0 modal-overlay z-50 hidden items-center justify-center">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4">
+    <div class="px-6 py-4 border-b flex items-center justify-between">
+      <h3 id="kilnFormTitle" class="text-lg font-bold">窑炉信息</h3>
+      <button onclick="closeModal('kilnFormModal')" class="text-gray-400 hover:text-gray-600 text-2xl">×</button>
+    </div>
+    <form id="kilnForm" class="p-6 space-y-4">
+      <input type="hidden" name="id">
+      <div><label class="block text-sm font-medium text-gray-700 mb-1">窑炉名称 *</label><input name="name" required class="w-full px-3 py-2 border rounded-lg" placeholder="如：4号窑炉"></div>
+      <div><label class="block text-sm font-medium text-gray-700 mb-1">容量（件） *</label><input name="capacity" type="number" min="1" required class="w-full px-3 py-2 border rounded-lg" placeholder="20"></div>
+      <div><label class="block text-sm font-medium text-gray-700 mb-1">状态</label>
+        <select name="status" class="w-full px-3 py-2 border rounded-lg">
+          <option value="idle">空闲</option><option value="scheduled">已排期</option><option value="firing">烧制中</option><option value="maintenance">维护中</option>
+        </select>
+      </div>
+      <div class="flex justify-end space-x-3 pt-4 border-t">
+        <button type="button" onclick="closeModal('kilnFormModal')" class="px-6 py-2 border rounded-lg hover:bg-gray-50">取消</button>
+        <button type="submit" class="px-6 py-2 gradient-bg text-white rounded-lg font-medium hover:opacity-90">保存</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div id="defectFormModal" class="fixed inset-0 modal-overlay z-50 hidden items-center justify-center">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4">
+    <div class="px-6 py-4 border-b flex items-center justify-between">
+      <h3 class="text-lg font-bold">瑕疵登记</h3>
+      <button onclick="closeModal('defectFormModal')" class="text-gray-400 hover:text-gray-600 text-2xl">×</button>
+    </div>
+    <form id="defectForm" class="p-6 space-y-4">
+      <input type="hidden" name="id">
+      <div><label class="block text-sm font-medium text-gray-700 mb-1">选择坯体 *</label>
+        <select name="body_id" id="defectBodySelect" required class="w-full px-3 py-2 border rounded-lg"></select>
+      </div>
+      <div><label class="block text-sm font-medium text-gray-700 mb-1">瑕疵类型 *</label>
+        <select name="defect_type" required class="w-full px-3 py-2 border rounded-lg">
+          <option>釉裂</option><option>缩釉</option><option>针孔</option><option>气泡</option>
+          <option>变形</option><option>色差</option><option>磕碰</option><option>落渣</option><option>其他</option>
+        </select>
+      </div>
+      <div><label class="block text-sm font-medium text-gray-700 mb-1">严重程度</label>
+        <select name="severity" class="w-full px-3 py-2 border rounded-lg">
+          <option value="minor">轻微</option><option value="medium">中等</option><option value="severe">严重</option>
+        </select>
+      </div>
+      <div class="flex items-center space-x-2">
+        <input type="checkbox" name="needs_refire" id="needsRefire" class="w-4 h-4">
+        <label for="needsRefire" class="text-sm">需要补烧（会将坯体重新排入待排池）</label>
+      </div>
+      <div><label class="block text-sm font-medium text-gray-700 mb-1">描述说明</label><textarea name="description" rows="3" class="w-full px-3 py-2 border rounded-lg resize-none"></textarea></div>
+      <div class="flex justify-end space-x-3 pt-4 border-t">
+        <button type="button" onclick="closeModal('defectFormModal')" class="px-6 py-2 border rounded-lg hover:bg-gray-50">取消</button>
+        <button type="submit" class="px-6 py-2 gradient-bg text-white rounded-lg font-medium hover:opacity-90">保存</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div id="bodyDetailModal" class="fixed inset-0 modal-overlay z-50 hidden items-center justify-center">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 max-h-[80vh] flex flex-col">
+    <div class="px-6 py-4 border-b flex items-center justify-between">
+      <h3 id="detailTitle" class="text-lg font-bold">坯体详情</h3>
+      <button onclick="closeModal('bodyDetailModal')" class="text-gray-400 hover:text-gray-600 text-2xl">×</button>
+    </div>
+    <div id="bodyDetailContent" class="flex-1 overflow-y-auto p-6 scrollbar-thin"></div>
+  </div>
+</div>
+
+<div id="toastContainer" class="fixed top-20 right-6 z-50 space-y-2"></div>
+
+<script>
+const API = 'http://localhost:8802/api';
+let currentView = 'dashboard';
+let draggedBody = null;
+let scheduledOrder = [];
+let glazeDoughnut, glazeBar, statusPie;
+
+flatpickr('#bfDate', { locale: 'zh', dateFormat: 'Y-m-d' });
+document.addEventListener('click', e => { if (!e.target.closest('.relative')) document.getElementById('notifDropdown')?.classList.add('hidden'); });
+
+function switchView(view) {
+  currentView = view;
+  document.querySelectorAll('.view-content').forEach(el => el.classList.add('hidden'));
+  document.getElementById('view-' + view).classList.remove('hidden');
+  document.querySelectorAll('.sidebar-btn').forEach(el => el.classList.remove('active'));
+  event && event.currentTarget && event.currentTarget.classList.add('active');
+  const t = { dashboard:['数据概览','实时掌握工坊运营状态'], scheduler:['烧制调度','拖拽坯体进行智能排期'],
+    bodies:['坯体管理','所有坯体信息管理'], kilns:['窑炉管理','窑炉容量与运行状态管理'],
+    defects:['瑕疵与补烧','瑕疵记录与补烧安排'], stats:['统计分析','釉色与烧制数据可视化'] };
+  document.getElementById('viewTitle').textContent = t[view][0];
+  document.getElementById('viewSubtitle').textContent = t[view][1];
+  if (view==='dashboard') loadDashboard();
+  if (view==='scheduler') refreshScheduler();
+  if (view==='bodies') loadBodies();
+  if (view==='kilns') loadKilnsManage();
+  if (view==='defects') loadDefects();
+  if (view==='stats') loadStatsCharts();
+}
+
+function toast(msg, type='success') {
+  const c = { success:'bg-green-500', error:'bg-red-500', info:'bg-blue-500', warning:'bg-yellow-500' };
+  const el = document.createElement('div');
+  el.className = `toast ${c[type]} text-white px-6 py-3 rounded-lg shadow-xl`;
+  el.textContent = msg;
+  document.getElementById('toastContainer').appendChild(el);
+  setTimeout(() => el.remove(), 3000);
+}
+
+function openModal(id) { const m = document.getElementById(id); m.classList.remove('hidden'); m.classList.add('flex'); }
+function closeModal(id) { const m = document.getElementById(id); m.classList.add('hidden'); m.classList.remove('flex'); }
+
+function statusText(s) { return {registered:'已登记',scheduled:'已排期',firing:'烧制中',ready:'待认领',claimed:'已领取',refire_needed:'需补烧'}[s]||s; }
+function statusColor(s) {
+  return {registered:'bg-gray-100 text-gray-700',scheduled:'bg-blue-100 text-blue-700',firing:'bg-purple-100 text-purple-700',
+    ready:'bg-green-100 text-green-700',claimed:'bg-gray-200 text-gray-600',refire_needed:'bg-orange-100 text-orange-700'}[s]||'bg-gray-100';
+}
+
+async function loadDashboard() {
+  try {
+    const [ov, bodies, glaze] = await Promise.all([
+      fetch(API+'/stats/overview').then(r=>r.json()),
+      fetch(API+'/bodies').then(r=>r.json()),
+      fetch(API+'/stats/glaze-count').then(r=>r.json())
+    ]);
+    document.getElementById('statTotal').textContent = ov.total;
+    document.getElementById('statRegistered').textContent = ov.registered;
+    document.getElementById('statFiring').textContent = ov.firing;
+    document.getElementById('statReady').textContent = ov.ready;
+
+    document.getElementById('kilnUtilList').innerHTML = ov.kilnUtilization.map(k => `
+      <div>
+        <div class="flex items-center justify-between text-sm mb-1">
+          <span class="font-medium text-slate-700">${k.name}</span>
+          <span class="text-slate-500">${k.used}/${k.capacity} · ${k.rate}%</span>
+        </div>
+        <div class="w-full h-3 bg-slate-100 rounded-full overflow-hidden">
+          <div class="h-full ${k.status==='firing'?'bg-gradient-to-r from-purple-500 to-pink-500 pulse-firing':'bg-gradient-to-r from-blue-500 to-purple-500'}" style="width:${k.rate}%"></div>
+        </div>
+      </div>`).join('') || '<div class="text-center text-slate-400 py-4">暂无窑炉数据</div>';
+
+    if (glazeDoughnut) glazeDoughnut.destroy();
+    glazeDoughnut = new Chart(document.getElementById('glazeChart'), {
+      type:'doughnut',
+      data:{ labels:glaze.map(d=>d.glaze_color), datasets:[{ data:glaze.map(d=>d.count),
+        backgroundColor:['#8b5cf6','#3b82f6','#10b981','#f59e0b','#ef4444','#ec4899','#14b8a6','#6366f1','#84cc16'], borderWidth:0 }]},
+      options:{ plugins:{legend:{position:'right',labels:{boxWidth:12,font:{size:11}}}}, cutout:'60%' }
+    });
+
+    document.getElementById('recentBodies').innerHTML = bodies.slice(0,5).map(b => `
+      <div class="flex items-center justify-between p-3 hover:bg-slate-50 rounded-lg border">
+        <div class="flex items-center space-x-3">
+          <div class="w-10 h-10 bg-gradient-to-br from-purple-100 to-pink-100 rounded-lg flex items-center justify-center">🏺</div>
+          <div><div class="font-medium text-slate-800">${b.body_name} <span class="text-xs text-purple-600">[${b.glaze_color}]</span></div>
+          <div class="text-xs text-slate-500">${b.customer_name} · ${b.customer_phone}</div></div>
+        </div>
+        <div class="text-right"><span class="status-badge ${statusColor(b.status)}">${statusText(b.status)}</span>
+        <div class="text-xs text-slate-400 mt-1">${(b.registered_at||'').split('T')[0]}</div></div>
+      </div>`).join('') || '<div class="text-center text-slate-400 py-6">暂无数据</div>';
+  } catch(e) { console.error(e); }
+}
+
+async function refreshScheduler() {
+  const sf = document.getElementById('filterStatus').value;
+  const kw = document.getElementById('filterKw').value.trim().toLowerCase();
+  scheduledOrder = [];
+  try {
+    const [kilns, all] = await Promise.all([fetch(API+'/kilns').then(r=>r.json()), fetch(API+'/bodies').then(r=>r.json())]);
+    let pool = all.filter(b => !b.kiln_id && (b.status==='registered' || b.status==='refire_needed'));
+    if (sf) pool = pool.filter(b => b.status===sf);
+    if (kw) pool = pool.filter(b => (b.customer_name+b.customer_phone+b.body_name).toLowerCase().includes(kw));
+    document.getElementById('poolCount').textContent = `共 ${pool.length} 件（拖拽到右侧窑炉）`;
+    document.getElementById('bodyPool').innerHTML = pool.map(b => dragHtml(b)).join('') ||
+      '<div class="text-center text-slate-400 py-8 text-sm">🎉 待排池已清空</div>';
+
+    document.getElementById('kilnsContainer').innerHTML = kilns.map(k => {
+      const kb = all.filter(b => b.kiln_id===k.id && (b.status==='scheduled'||b.status==='firing')).sort((a,b)=>(a.kiln_order||0)-(b.kiln_order||0));
+      const full = kb.length >= k.capacity;
+      const firing = k.status==='firing';
+      kb.forEach((b,i) => scheduledOrder.push({id:b.id, kiln_id:k.id, order:i+1}));
+      return `<div class="kiln-card bg-white rounded-2xl shadow-sm overflow-hidden">
+        <div class="${firing?'bg-gradient-to-r from-purple-600 to-pink-600':'bg-gradient-to-r from-slate-600 to-slate-700'} px-5 py-4 text-white">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="font-bold text-lg flex items-center space-x-2"><span>${firing?'🔥':'🏭'}</span><span>${k.name}</span></h3>
+            <span class="text-xs px-3 py-1 rounded-full ${firing?'bg-white/20 animate-pulse':'bg-white/20'}">${firing?'烧制中':full?'已满员':'空闲'}</span>
+          </div>
+          <div class="flex items-center justify-between text-sm"><span class="text-white/80">容量：<b>${kb.length}</b> / ${k.capacity}</span>
+          <span class="text-white/80">剩余：<b>${k.capacity-kb.length}</b> 位</span></div>
+          <div class="w-full h-2 bg-white/20 rounded-full mt-3 overflow-hidden"><div class="h-full ${full?'bg-red-400':'bg-white'}" style="width:${(kb.length/k.capacity*100)}%"></div></div>
+        </div>
+        <div class="p-4">
+          ${!firing ? `<div class="flex space-x-2 mb-3">
+            <button onclick="assignAll(${k.id})" class="flex-1 text-xs py-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition">一键分配</button>
+            <button onclick="startFiring(${k.id})" ${kb.length===0?'disabled':''} class="flex-1 text-xs py-2 ${kb.length===0?'bg-gray-100 text-gray-400':'bg-purple-50 text-purple-600 hover:bg-purple-100'} rounded-lg transition">🔥 开始烧制</button>
+          </div>` : `<button onclick="finishFiring(${k.id})" class="w-full mb-3 py-2 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-lg text-sm font-medium hover:opacity-90 transition">✅ 结束烧制 & 发送认领</button>`}
+          <div id="kdrop-${k.id}" class="drop-zone border-2 border-gray-200 border-dashed rounded-xl p-2 min-h-[120px] space-y-2 ${full?'over-limit':''}"
+               data-kiln="${k.id}" data-cap="${k.capacity}" data-cnt="${kb.length}"
+               ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDropKiln(event,${k.id})">
+            ${kb.length===0?'<div class="text-center text-slate-400 py-6 text-xs">拖拽坯体到此处</div>':kb.map(b=>dragHtml(b,true)).join('')}
+          </div>
+        </div></div>`;
+    }).join('') || '<div class="col-span-3 text-center text-slate-400 py-12">请先添加窑炉</div>';
+  } catch(e) { console.error(e); toast('加载失败','error'); }
+}
+
+function dragHtml(b, inKiln=false) {
+  return `<div class="drag-item bg-gradient-to-r ${inKiln?'from-purple-50 to-pink-50 border-purple-200':'from-slate-50 to-white border-slate-200'} border rounded-lg p-3"
+           draggable="true" data-id="${b.id}" ondragstart="onDragStart(event,${b.id})" ondragend="onDragEnd(event)">
+    <div class="flex items-center justify-between">
+      <div class="flex-1 min-w-0">
+        <div class="font-medium text-sm text-slate-800 truncate">${b.body_name} <span class="text-xs text-purple-600">[${b.glaze_color}]</span></div>
+        <div class="text-xs text-slate-500 truncate mt-0.5">${b.customer_name} · ${b.customer_phone}</div>
+      </div>
+      ${inKiln?`<button onclick="event.stopPropagation();removeFromKiln(${b.id})" class="ml-2 w-6 h-6 flex items-center justify-center text-red-400 hover:bg-red-50 rounded text-lg">×</button>`:''}
+    </div>
+    ${b.status==='refire_needed'?'<div class="mt-1 text-xs text-orange-600 bg-orange-50 inline-block px-2 py-0.5 rounded">补烧件</div>':''}
+  </div>`;
+}
+
+function onDragStart(e,id) { draggedBody=id; e.target.classList.add('dragging'); e.dataTransfer.effectAllowed='move'; }
+function onDragEnd(e) { e.target.classList.remove('dragging'); draggedBody=null; }
+function onDragOver(e) { e.preventDefault(); e.currentTarget.classList.add('drag-over'); }
+function onDragLeave(e) { e.currentTarget.classList.remove('drag-over'); }
+
+function onDropPool(e) {
+  e.preventDefault(); e.currentTarget.classList.remove('drag-over');
+  if (!draggedBody) return;
+  const exist = scheduledOrder.find(x=>x.id===draggedBody);
+  if (exist) { scheduledOrder = scheduledOrder.filter(x=>x.id!==draggedBody); saveReorder(true); }
+  refreshScheduler();
+}
+
+async function onDropKiln(e, kid) {
+  e.preventDefault(); e.currentTarget.classList.remove('drag-over');
+  if (!draggedBody) return;
+  const zone = e.currentTarget;
+  const cap = parseInt(zone.dataset.cap);
+  let cnt = parseInt(zone.dataset.cnt);
+  const alreadyHere = scheduledOrder.find(x=>x.id===draggedBody && x.kiln_id===kid);
+  if (alreadyHere) { refreshScheduler(); return; }
+  const wasOther = scheduledOrder.find(x=>x.id===draggedBody);
+  if (!wasOther && cnt >= cap) { toast(`❌ 窑炉已满员（${cnt}/${cap}）`,'warning'); return; }
+  if (wasOther) { const it = scheduledOrder.find(x=>x.id===draggedBody); it.kiln_id = kid; }
+  else { cnt++; scheduledOrder.push({id:draggedBody, kiln_id:kid, order:cnt}); }
+  const kb = scheduledOrder.filter(x=>x.kiln_id===kid);
+  kb.forEach((x,i)=>x.order=i+1);
+  saveReorder(true);
+  refreshScheduler();
+}
+
+async function saveReorder(silent=false) {
+  if (scheduledOrder.length===0) { refreshScheduler(); return; }
+  const items = scheduledOrder.map(x=>({id:x.id,kiln_id:x.kiln_id,order:x.order}));
+  try {
+    const res = await fetch(API+'/bodies/reorder', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({items})});
+    if (res.ok) { if(!silent) toast('✅ 排期已保存'); refreshScheduler(); }
+    else { const r = await res.json(); toast('❌ '+(r.error||'保存失败'),'error'); }
+  } catch(e) { toast('网络错误','error'); }
+}
+
+async function removeFromKiln(id) {
+  try {
+    await fetch(`${API}/bodies/${id}/remove-kiln`,{method:'POST'});
+    scheduledOrder = scheduledOrder.filter(x=>x.id!==id);
+    refreshScheduler(); toast('已移出窑炉');
+  } catch(e) { toast('操作失败','error'); }
+}
+
+async function assignAll(kid) {
+  const sf = document.getElementById('filterStatus').value;
+  const kw = document.getElementById('filterKw').value.trim().toLowerCase();
+  try {
+    const kilns = await fetch(API+'/kilns').then(r=>r.json());
+    const bodies = await fetch(API+'/bodies').then(r=>r.json());
+    const k = kilns.find(x=>x.id===kid);
+    let pool = bodies.filter(b=>!b.kiln_id && (b.status==='registered'||b.status==='refire_needed'));
+    if (sf) pool = pool.filter(b=>b.status===sf);
+    if (kw) pool = pool.filter(b=>(b.customer_name+b.customer_phone+b.body_name).toLowerCase().includes(kw));
+    const cur = bodies.filter(b=>b.kiln_id===kid && (b.status==='scheduled'||b.status==='firing'));
+    const avail = k.capacity - cur.length;
+    if (avail<=0) { toast('窑炉已满员','warning'); return; }
+    const ids = pool.slice(0,avail).map(b=>b.id);
+    if (ids.length===0) { toast('暂无可分配的坯体','info'); return; }
+    const res = await fetch(API+'/bodies/assign',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({body_ids:ids, kiln_id:kid, schedule_date:new Date().toISOString().split('T')[0]})});
+    if (res.ok) { toast(`✅ 成功分配 ${ids.length} 件坯体到 ${k.name}`); refreshScheduler(); }
+    else { const r = await res.json(); toast('❌ '+(r.error||'分配失败'),'error'); }
+  } catch(e) { toast('操作失败','error'); }
+}
+
+async function startFiring(kid) {
+  if (!confirm('确认开始烧制？开始后无法再添加或移除坯体。')) return;
+  try {
+    const res = await fetch(`${API}/kilns/${kid}/start-firing`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({temperature:1280})});
+    if (res.ok) { toast('🔥 窑炉已开始烧制！'); refreshScheduler(); loadNotifications(); }
+    else { const r=await res.json(); toast('❌ '+(r.error||'操作失败'),'error'); }
+  } catch(e) { toast('操作失败','error'); }
+}
+
+async function finishFiring(kid) {
+  if (!confirm('确认结束烧制？将自动发送认领提醒给所有顾客。')) return;
+  try {
+    const res = await fetch(`${API}/kilns/${kid}/finish-firing`,{method:'POST'});
+    if (res.ok) { toast('✅ 烧制完成！已发送认领提醒'); refreshScheduler(); loadNotifications(); loadDashboard(); }
+    else { const r=await res.json(); toast('❌ '+(r.error||'操作失败'),'error'); }
+  } catch(e) { toast('操作失败','error'); }
+}
+
+async function loadBodies() {
+  const st = document.getElementById('bodyFilterStatus').value;
+  const kw = document.getElementById('bodyFilterKw').value.trim().toLowerCase();
+  try {
+    let bodies = await fetch(API+'/bodies'+(st?`?status=${st}`:'')).then(r=>r.json());
+    if (kw) bodies = bodies.filter(b=>(b.customer_name+b.customer_phone+b.body_name+b.id).toLowerCase().includes(kw));
+    document.getElementById('bodiesTable').innerHTML = bodies.length===0 ?
+      '<tr><td colspan="7" class="text-center text-slate-400 py-12">暂无数据</td></tr>' :
+      bodies.map(b=>`<tr class="border-t hover:bg-slate-50 transition">
+        <td class="px-6 py-4 text-slate-500">#${b.id}</td>
+        <td class="px-6 py-4"><div class="font-medium text-slate-800">${b.body_name}</div><div class="text-xs text-slate-500">${b.weight?b.weight+'kg':''}</div></td>
+        <td class="px-6 py-4"><div class="text-slate-800">${b.customer_name}</div><div class="text-xs text-slate-500">${b.customer_phone}</div></td>
+        <td class="px-6 py-4"><span class="px-2 py-1 bg-purple-50 text-purple-700 rounded text-xs">${b.glaze_color}</span></td>
+        <td class="px-6 py-4"><span class="status-badge ${statusColor(b.status)}">${statusText(b.status)}</span></td>
+        <td class="px-6 py-4 text-slate-600 text-sm">${b.schedule_date||'—'}</td>
+        <td class="px-6 py-4"><div class="flex items-center space-x-2">
+          <button onclick="showBodyDetail(${b.id})" class="text-xs text-blue-600 hover:text-blue-800">详情</button>
+          <button onclick="editBody(${b.id})" class="text-xs text-purple-600 hover:text-purple-800">编辑</button>
+          <button onclick="deleteBody(${b.id})" class="text-xs text-red-600 hover:text-red-800">删除</button>
+        </div></td></tr>`).join('');
+  } catch(e) { console.error(e); }
+}
+
+function openBodyForm(data=null) {
+  document.getElementById('bodyFormTitle').textContent = data?'编辑坯体':'新增坯体';
+  const f = document.getElementById('bodyForm'); f.reset();
+  if (data) { f.id.value=data.id; f.customer_name.value=data.customer_name; f.customer_phone.value=data.customer_phone;
+    f.body_name.value=data.body_name; f.glaze_color.value=data.glaze_color;
+    f.weight.value=data.weight||''; f.status.value=data.status;
+    f.notes.value=data.notes||''; f.schedule_date.value=data.schedule_date||'';
+  } else { f.id.value=''; f.status.value='registered'; }
+  openModal('bodyFormModal');
+}
+
+async function editBody(id) { try { const b = await fetch(`${API}/bodies/${id}`).then(r=>r.json()); openBodyForm(b); } catch(e){ toast('加载失败','error'); } }
+
+document.getElementById('bodyForm').addEventListener('submit', async e=>{
+  e.preventDefault();
+  const fd = new FormData(e.target); const data = Object.fromEntries(fd.entries());
+  if (data.weight) data.weight = parseFloat(data.weight)||0;
+  const id = data.id; delete data.id;
+  try {
+    const url = id?`${API}/bodies/${id}`:API+'/bodies'; const method = id?'PUT':'POST';
+    const res = await fetch(url,{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+    if (res.ok) { toast(id?'✅ 修改成功':'✅ 新增成功'); closeModal('bodyFormModal'); loadBodies(); loadDashboard(); }
+    else { const r=await res.json(); toast('❌ '+(r.error||'保存失败'),'error'); }
+  } catch(e) { toast('网络错误','error'); }
+});
+
+async function deleteBody(id) {
+  if (!confirm('确认删除此坯体？此操作不可恢复。')) return;
+  try { await fetch(`${API}/bodies/${id}`,{method:'DELETE'}); toast('已删除'); loadBodies(); loadDashboard(); }
+  catch(e) { toast('删除失败','error'); }
+}
+
+async function showBodyDetail(id) {
+  try {
+    const b = await fetch(`${API}/bodies/${id}`).then(r=>r.json());
+    document.getElementById('detailTitle').textContent = `#${b.id} - ${b.body_name}`;
+    document.getElementById('bodyDetailContent').innerHTML = `
+      <div class="grid grid-cols-2 gap-4 mb-6">
+        <div class="bg-slate-50 p-4 rounded-lg"><div class="text-xs text-slate-500">顾客</div><div class="font-bold">${b.customer_name}</div></div>
+        <div class="bg-slate-50 p-4 rounded-lg"><div class="text-xs text-slate-500">电话</div><div class="font-bold">${b.customer_phone}</div></div>
+        <div class="bg-slate-50 p-4 rounded-lg"><div class="text-xs text-slate-500">作品</div><div class="font-bold">${b.body_name}</div></div>
+        <div class="bg-slate-50 p-4 rounded-lg"><div class="text-xs text-slate-500">釉色</div><div class="font-bold text-purple-600">${b.glaze_color}</div></div>
+        <div class="bg-slate-50 p-4 rounded-lg"><div class="text-xs text-slate-500">重量</div><div class="font-bold">${b.weight||'-'} kg</div></div>
+        <div class="bg-slate-50 p-4 rounded-lg"><div class="text-xs text-slate-500">当前状态</div><span class="status-badge ${statusColor(b.status)}">${statusText(b.status)}</span></div>
+        <div class="bg-slate-50 p-4 rounded-lg"><div class="text-xs text-slate-500">登记时间</div><div class="font-medium text-sm">${b.registered_at?.replace('T',' ')||'-'}</div></div>
+        <div class="bg-slate-50 p-4 rounded-lg"><div class="text-xs text-slate-500">排期日期</div><div class="font-medium">${b.schedule_date||'-'}</div></div>
+      </div>
+      ${b.notes?`<div class="mb-6"><div class="text-sm font-medium text-slate-600 mb-2">备注</div><div class="bg-slate-50 p-4 rounded-lg text-sm">${b.notes}</div></div>`:''}
+      ${b.defects&&b.defects.length>0?`<div class="mb-6"><div class="text-sm font-medium text-slate-600 mb-2">瑕疵记录 (${b.defects.length})</div>
+        <div class="space-y-2">${b.defects.map(d=>`<div class="border rounded-lg p-3 flex items-start justify-between">
+          <div><span class="font-medium text-orange-700">${d.defect_type}</span>
+          <span class="ml-2 text-xs px-2 py-0.5 bg-gray-100 rounded">${{minor:'轻微',medium:'中等',severe:'严重'}[d.severity]||d.severity}</span>
+          ${d.needs_refire?`<span class="ml-2 text-xs px-2 py-0.5 bg-red-100 text-red-700 rounded">需补烧</span>`:''}
+          ${d.description?`<div class="text-sm text-slate-500 mt-1">${d.description}</div>`:''}</div>
+          <div class="text-xs text-slate-400">${(d.created_at||'').split('T')[0]}</div></div>`).join('')}</div></div>`:''}
+      ${b.notifications&&b.notifications.length>0?`<div><div class="text-sm font-medium text-slate-600 mb-2">通知记录 (${b.notifications.length})</div>
+        <div class="space-y-2">${b.notifications.map(n=>`<div class="border rounded-lg p-3"><div class="font-medium">${n.message}</div>
+          <div class="text-xs text-slate-400 mt-1">${(n.created_at||'').replace('T',' ')}</div></div>`).join('')}</div></div>`:''}
+      <div class="mt-6 flex space-x-3 justify-end border-t pt-4">
+        ${b.status==='ready'?`<button onclick="claimBody(${b.id})" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm">确认领取</button>`:''}
+        <button onclick="closeModal('bodyDetailModal');editBody(${b.id})" class="px-4 py-2 gradient-bg text-white rounded-lg text-sm hover:opacity-90">编辑</button>
+        <button onclick="closeModal('bodyDetailModal')" class="px-4 py-2 border rounded-lg text-sm hover:bg-slate-50">关闭</button>
+      </div>`;
+    openModal('bodyDetailModal');
+  } catch(e) { toast('加载失败','error'); }
+}
+
+async function claimBody(id) {
+  try { await fetch(`${API}/bodies/${id}/claim`,{method:'POST'}); toast('✅ 已标记为已领取'); closeModal('bodyDetailModal'); loadBodies(); loadDashboard(); }
+  catch(e) { toast('操作失败','error'); }
+}
+
+async function loadKilnsManage() {
+  try {
+    const [kilns, bodies] = await Promise.all([fetch(API+'/kilns').then(r=>r.json()), fetch(API+'/bodies').then(r=>r.json())]);
+    document.getElementById('kilnsManage').innerHTML = kilns.length===0 ?
+      '<div class="col-span-3 text-center text-slate-400 py-12">暂无窑炉，点击右上角添加</div>' :
+      kilns.map(k => {
+        const kb = bodies.filter(b=>b.kiln_id===k.id && (b.status==='scheduled'||b.status==='firing'));
+        const rate = (kb.length/k.capacity*100).toFixed(0);
+        return `<div class="bg-white rounded-2xl shadow-sm p-6 border-t-4 ${k.status==='firing'?'border-purple-500':'border-slate-400'}">
+          <div class="flex items-start justify-between mb-4">
+            <div><div class="flex items-center space-x-2"><span class="text-2xl">${k.status==='firing'?'🔥':'🏭'}</span>
+              <h3 class="text-xl font-bold text-slate-800">${k.name}</h3></div>
+              <span class="status-badge mt-2 inline-block ${k.status==='firing'?'bg-purple-100 text-purple-700':'bg-gray-100 text-gray-700'}">
+                ${{idle:'空闲',scheduled:'已排期',firing:'烧制中',maintenance:'维护中'}[k.status]||k.status}</span></div>
+            <div class="flex space-x-1">
+              <button onclick="editKiln(${k.id},'${k.name}',${k.capacity},'${k.status}')" class="w-8 h-8 text-slate-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg">✏️</button>
+              <button onclick="deleteKiln(${k.id})" class="w-8 h-8 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg">🗑️</button>
+            </div>
+          </div>
+          <div class="mb-4"><div class="flex items-center justify-between text-sm mb-2">
+            <span class="text-slate-600">容量使用</span><span class="font-bold text-slate-800">${kb.length} / ${k.capacity} 件</span></div>
+            <div class="w-full h-4 bg-slate-100 rounded-full overflow-hidden">
+              <div class="h-full ${kb.length>=k.capacity?'bg-gradient-to-r from-red-500 to-orange-500':k.status==='firing'?'bg-gradient-to-r from-purple-500 to-pink-500 pulse-firing':'bg-gradient-to-r from-blue-500 to-purple-500'}" style="width:${rate}%"></div>
+            </div></div>
+          <div class="grid grid-cols-3 gap-2 text-center text-sm mb-4">
+            <div class="bg-slate-50 p-2 rounded-lg"><div class="text-slate-500 text-xs">剩余</div><div class="font-bold text-lg">${k.capacity-kb.length}</div></div>
+            <div class="bg-slate-50 p-2 rounded-lg"><div class="text-slate-500 text-xs">利用率</div><div class="font-bold text-lg">${rate}%</div></div>
+            <div class="bg-slate-50 p-2 rounded-lg"><div class="text-slate-500 text-xs">容量</div><div class="font-bold text-lg">${k.capacity}</div></div>
+          </div>
+          ${kb.length>0?`<div class="text-xs text-slate-500 mb-2">当前坯体 (${kb.length})</div>
+          <div class="max-h-24 overflow-y-auto scrollbar-thin space-y-1">
+            ${kb.map(b=>`<div class="text-xs bg-purple-50 px-2 py-1 rounded text-purple-700 truncate">#${b.id} ${b.body_name} [${b.glaze_color}]</div>`).join('')}
+          </div>`:`<div class="text-xs text-center text-slate-400 py-2">暂无坯体</div>`}
+        </div>`;
+      }).join('');
+  } catch(e) { console.error(e); }
+}
+
+function openKilnForm(data=null) {
+  document.getElementById('kilnFormTitle').textContent = data?'编辑窑炉':'新增窑炉';
+  const f = document.getElementById('kilnForm'); f.reset();
+  if (data) { f.id.value=data.id; f.name.value=data.name; f.capacity.value=data.capacity; f.status.value=data.status; }
+  else { f.id.value=''; f.status.value='idle'; }
+  openModal('kilnFormModal');
+}
+
+function editKiln(id,name,capacity,status) { openKilnForm({id,name,capacity,status}); }
+
+document.getElementById('kilnForm').addEventListener('submit', async e=>{
+  e.preventDefault();
+  const fd = new FormData(e.target); const data = Object.fromEntries(fd.entries());
+  data.capacity = parseInt(data.capacity);
+  const id = data.id; delete data.id;
+  try {
+    const url = id?`${API}/kilns/${id}`:API+'/kilns'; const method = id?'PUT':'POST';
+    const res = await fetch(url,{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+    if (res.ok) { toast(id?'✅ 修改成功':'✅ 新增成功'); closeModal('kilnFormModal'); loadKilnsManage(); loadDashboard(); }
+    else { const r=await res.json(); toast('❌ '+(r.error||'保存失败'),'error'); }
+  } catch(e) { toast('网络错误','error'); }
+});
+
+async function deleteKiln(id) {
+  if (!confirm('确认删除此窑炉？')) return;
+  try { await fetch(`${API}/kilns/${id}`,{method:'DELETE'}); toast('已删除'); loadKilnsManage(); loadDashboard(); }
+  catch(e) { toast('删除失败','error'); }
+}
+
+async function loadDefects() {
+  try {
+    const defects = await fetch(API+'/defects').then(r=>r.json());
+    document.getElementById('defectTotal').textContent = defects.length;
+    document.getElementById('refireTotal').textContent = defects.filter(d=>d.needs_refire).length;
+    document.getElementById('minorTotal').textContent = defects.filter(d=>d.severity==='minor').length;
+    document.getElementById('defectsTable').innerHTML = defects.length===0 ?
+      '<div class="text-center text-slate-400 py-12">暂无瑕疵记录</div>' :
+      defects.map(d => `<div class="p-5 hover:bg-slate-50">
+        <div class="flex items-start justify-between">
+          <div class="flex-1">
+            <div class="flex items-center space-x-2 mb-2">
+              <span class="font-bold text-orange-700">${d.defect_type}</span>
+              <span class="text-xs px-2 py-0.5 rounded ${{minor:'bg-green-100 text-green-700',medium:'bg-yellow-100 text-yellow-700',severe:'bg-red-100 text-red-700'}[d.severity]||'bg-gray-100'}">${{minor:'轻微',medium:'中等',severe:'严重'}[d.severity]||d.severity}</span>
+              ${d.needs_refire?'<span class="text-xs px-2 py-0.5 rounded bg-red-100 text-red-700">需补烧</span>':''}
+            </div>
+            <div class="text-sm text-slate-600 mb-1">作品：<b>${d.body_name}</b> <span class="text-purple-600">[${d.glaze_color}]</span></div>
+            <div class="text-sm text-slate-500">顾客：${d.customer_name}</div>
+            ${d.description?`<div class="text-sm text-slate-500 mt-2 bg-slate-50 p-3 rounded-lg">${d.description}</div>`:''}
+          </div>
+          <div class="text-right ml-4">
+            <div class="text-xs text-slate-400 mb-2">${(d.created_at||'').split('T')[0]}</div>
+            <button onclick="deleteDefect(${d.id})" class="text-xs text-red-600 hover:text-red-800">删除</button>
+          </div>
+        </div>
+      </div>`).join('');
+  } catch(e) { console.error(e); }
+}
+
+async function openDefectForm() {
+  document.getElementById('defectForm').reset();
+  try {
+    const bodies = await fetch(API+'/bodies').then(r=>r.json());
+    document.getElementById('defectBodySelect').innerHTML = bodies.map(b=>
+      `<option value="${b.id}">#${b.id} ${b.body_name} [${b.glaze_color}] - ${b.customer_name}</option>`
+    ).join('');
+  } catch(e) {}
+  openModal('defectFormModal');
+}
+
+document.getElementById('defectForm').addEventListener('submit', async e=>{
+  e.preventDefault();
+  const fd = new FormData(e.target); const data = Object.fromEntries(fd.entries());
+  data.needs_refire = data.needs_refire === 'on' ? 1 : 0;
+  delete data.id;
+  try {
+    const res = await fetch(`${API}/bodies/${data.body_id}/defects`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+    if (res.ok) { toast('✅ 瑕疵已登记'); closeModal('defectFormModal'); loadDefects(); loadDashboard(); }
+    else { const r=await res.json(); toast('❌ '+(r.error||'保存失败'),'error'); }
+  } catch(e) { toast('网络错误','error'); }
+});
+
+async function deleteDefect(id) {
+  if (!confirm('确认删除此瑕疵记录？')) return;
+  try { await fetch(`${API}/defects/${id}`,{method:'DELETE'}); toast('已删除'); loadDefects(); }
+  catch(e) { toast('删除失败','error'); }
+}
+
+async function loadStatsCharts() {
+  try {
+    const [glazeData, bodies] = await Promise.all([
+      fetch(API+'/stats/glaze-count').then(r=>r.json()),
+      fetch(API+'/bodies').then(r=>r.json())
+    ]);
+
+    if (glazeBar) glazeBar.destroy();
+    glazeBar = new Chart(document.getElementById('glazeBarChart'), {
+      type:'bar',
+      data:{ labels:glazeData.map(d=>d.glaze_color),
+        datasets:[{label:'总件数',data:glazeData.map(d=>d.count),backgroundColor:'#8b5cf6',borderRadius:6},
+          {label:'已烧制',data:glazeData.map(d=>d.fired_count),backgroundColor:'#10b981',borderRadius:6}]},
+      options:{responsive:true,plugins:{legend:{position:'top'}},scales:{y:{beginAtZero:true}}}
+    });
+
+    const statusCount = {};
+    bodies.forEach(b=>{ statusCount[b.status]=(statusCount[b.status]||0)+1; });
+    if (statusPie) statusPie.destroy();
+    statusPie = new Chart(document.getElementById('statusPieChart'), {
+      type:'pie',
+      data:{ labels:Object.keys(statusCount).map(s=>statusText(s)),
+        datasets:[{data:Object.values(statusCount),
+          backgroundColor:['#94a3b8','#3b82f6','#a855f7','#10b981','#64748b','#f97316'],borderWidth:2,borderColor:'#fff'}]},
+      options:{plugins:{legend:{position:'right',labels:{boxWidth:12,font:{size:11}}}}}
+    });
+
+    const total = glazeData.reduce((s,d)=>s+d.count,0) || 1;
+    document.getElementById('glazeStatsTable').innerHTML = glazeData.map(d=>{
+      const pct = (d.count/total*100).toFixed(1);
+      return `<tr class="border-t">
+        <td class="px-4 py-3 font-medium">${d.glaze_color}</td>
+        <td class="px-4 py-3">${d.count}</td>
+        <td class="px-4 py-3">${d.fired_count}</td>
+        <td class="px-4 py-3">
+          <div class="flex items-center space-x-2">
+            <div class="w-24 h-2 bg-slate-100 rounded-full overflow-hidden"><div class="h-full bg-purple-500" style="width:${pct}%"></div></div>
+            <span class="text-sm text-slate-600">${pct}%</span>
+          </div>
+        </td>
+      </tr>`;
+    }).join('') || '<tr><td colspan="4" class="text-center text-slate-400 py-8">暂无数据</td></tr>';
+  } catch(e) { console.error(e); }
+}
+
+function toggleNotif() {
+  document.getElementById('notifDropdown').classList.toggle('hidden');
+  loadNotifications();
+}
+
+async function loadNotifications() {
+  try {
+    const notifs = await fetch(API+'/notifications').then(r=>r.json());
+    const unread = notifs.filter(n=>!n.is_read).length;
+    const badge = document.getElementById('notifBadge');
+    if (unread>0) { badge.classList.remove('hidden'); badge.textContent = unread; }
+    else badge.classList.add('hidden');
+    document.getElementById('notifList').innerHTML = notifs.length===0 ?
+      '<div class="text-center text-slate-400 py-6 text-sm">暂无提醒</div>' :
+      notifs.slice(0,10).map(n=>`<div class="px-4 py-3 border-b hover:bg-slate-50 ${n.is_read?'opacity-60':'bg-blue-50'}">
+        <div class="text-sm">${n.message}</div>
+        <div class="flex justify-between items-center mt-1">
+          <div class="text-xs text-slate-500">${n.body_name} · ${n.customer_name}</div>
+          ${!n.is_read?`<button onclick="markRead(${n.id})" class="text-xs text-blue-600 hover:text-blue-800">标为已读</button>`:''}
+        </div>
+      </div>`).join('');
+  } catch(e) {}
+}
+
+async function markRead(id) {
+  try { await fetch(`${API}/notifications/${id}/read`,{method:'POST'}); loadNotifications(); } catch(e) {}
+}
+async function markAllRead() {
+  try { await fetch(API+'/notifications/read-all',{method:'POST'}); loadNotifications(); } catch(e) {}
+}
+
+loadDashboard();
+loadNotifications();
+setInterval(loadNotifications, 30000);
+</script>
+</body>
+</html>

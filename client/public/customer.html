@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>陶土工坊 - 顾客前台</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/zh.js"></script>
+<style>
+  .gradient-bg { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+  .ceramic-pattern { background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E"); }
+  .status-badge { padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 500; }
+  .cal-day { min-height: 100px; transition: all 0.2s; }
+  .cal-day:hover { background: #f8fafc; }
+  .cal-today { background: #eff6ff; border: 2px solid #3b82f6; }
+  .toast { animation: slideIn 0.3s ease; }
+  @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+  .modal-overlay { background: rgba(0,0,0,0.5); backdrop-filter: blur(4px); }
+</style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+
+<nav class="gradient-bg ceramic-pattern text-white shadow-lg">
+  <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+    <div class="flex items-center space-x-3">
+      <div class="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center text-2xl">🏺</div>
+      <div>
+        <h1 class="text-xl font-bold">陶土工坊</h1>
+        <p class="text-xs text-white/80">匠心烧制 · 每一件都是孤品</p>
+      </div>
+    </div>
+    <div class="flex items-center space-x-4">
+      <button onclick="switchTab('register')" class="nav-btn px-4 py-2 rounded-lg hover:bg-white/20 transition">坯体登记</button>
+      <button onclick="switchTab('calendar')" class="nav-btn px-4 py-2 rounded-lg hover:bg-white/20 transition">烧制日历</button>
+      <button onclick="switchTab('query')" class="nav-btn px-4 py-2 rounded-lg hover:bg-white/20 transition">进度查询</button>
+      <button onclick="showNotifications()" class="relative px-4 py-2 rounded-lg hover:bg-white/20 transition">
+        <span>🔔 认领提醒</span>
+        <span id="notifBadge" class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center hidden">0</span>
+      </button>
+      <a href="/admin" class="bg-white/20 px-4 py-2 rounded-lg hover:bg-white/30 transition text-sm">⚙️ 管理后台</a>
+    </div>
+  </div>
+</nav>
+
+<main class="max-w-7xl mx-auto px-6 py-8">
+
+  <section id="tab-register" class="tab-content">
+    <div class="bg-white rounded-2xl shadow-xl overflow-hidden">
+      <div class="gradient-bg ceramic-pattern px-8 py-6 text-white">
+        <h2 class="text-2xl font-bold">📝 坯体登记</h2>
+        <p class="text-white/80 mt-1">完成拉坯后，请填写信息登记您的作品，我们将为您安排烧制</p>
+      </div>
+      <form id="registerForm" class="p-8 grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">您的姓名 *</label>
+          <input type="text" name="customer_name" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition" placeholder="请输入姓名">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">联系电话 *</label>
+          <input type="tel" name="customer_phone" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition" placeholder="请输入手机号">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">作品名称 *</label>
+          <input type="text" name="body_name" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition" placeholder="如：茶杯、花瓶、碗等">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">釉色选择 *</label>
+          <select name="glaze_color" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition">
+            <option value="">请选择釉色</option>
+            <option value="青瓷">青瓷</option>
+            <option value="青花瓷">青花瓷</option>
+            <option value="钧瓷">钧瓷</option>
+            <option value="汝瓷">汝瓷</option>
+            <option value="黑陶">黑陶</option>
+            <option value="白瓷">白瓷</option>
+            <option value="粉彩">粉彩</option>
+            <option value="釉里红">釉里红</option>
+            <option value="其他">其他</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">重量 (kg)</label>
+          <input type="number" step="0.01" name="weight" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition" placeholder="请输入大致重量">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">期望烧制日期</label>
+          <input type="text" id="scheduleDate" name="schedule_date" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition" placeholder="选择期望日期">
+        </div>
+        <div class="md:col-span-2">
+          <label class="block text-sm font-medium text-gray-700 mb-2">备注说明</label>
+          <textarea name="notes" rows="3" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition resize-none" placeholder="特殊要求、烧制温度、装饰说明等"></textarea>
+        </div>
+        <div class="md:col-span-2 flex justify-end space-x-4">
+          <button type="reset" class="px-8 py-3 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition">清空</button>
+          <button type="submit" class="px-8 py-3 gradient-bg text-white rounded-lg hover:opacity-90 transition font-medium shadow-lg">提交登记</button>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <section id="tab-calendar" class="tab-content hidden">
+    <div class="bg-white rounded-2xl shadow-xl overflow-hidden">
+      <div class="gradient-bg ceramic-pattern px-8 py-6 text-white flex items-center justify-between">
+        <div>
+          <h2 class="text-2xl font-bold">📅 烧制排期日历</h2>
+          <p class="text-white/80 mt-1">查看窑炉空余时段，合理安排您的作品烧制计划</p>
+        </div>
+        <div class="flex items-center space-x-2">
+          <button onclick="prevMonth()" class="w-10 h-10 bg-white/20 rounded-lg hover:bg-white/30 transition">‹</button>
+          <span id="calMonthLabel" class="text-xl font-bold w-40 text-center"></span>
+          <button onclick="nextMonth()" class="w-10 h-10 bg-white/20 rounded-lg hover:bg-white/30 transition">›</button>
+        </div>
+      </div>
+      <div class="p-6">
+        <div class="grid grid-cols-7 gap-1 mb-2">
+          <div class="text-center text-sm font-medium text-gray-500 py-2">周日</div>
+          <div class="text-center text-sm font-medium text-gray-500 py-2">周一</div>
+          <div class="text-center text-sm font-medium text-gray-500 py-2">周二</div>
+          <div class="text-center text-sm font-medium text-gray-500 py-2">周三</div>
+          <div class="text-center text-sm font-medium text-gray-500 py-2">周四</div>
+          <div class="text-center text-sm font-medium text-gray-500 py-2">周五</div>
+          <div class="text-center text-sm font-medium text-gray-500 py-2">周六</div>
+        </div>
+        <div id="calendarGrid" class="grid grid-cols-7 gap-1"></div>
+      </div>
+      <div class="px-6 pb-6 border-t bg-gray-50">
+        <h3 class="font-medium text-gray-700 mb-3">图例说明</h3>
+        <div class="flex flex-wrap gap-4 text-sm">
+          <div class="flex items-center space-x-2"><span class="w-4 h-4 rounded bg-green-100 border border-green-400"></span><span>空余时段充足</span></div>
+          <div class="flex items-center space-x-2"><span class="w-4 h-4 rounded bg-yellow-100 border border-yellow-400"></span><span>部分窑炉已排</span></div>
+          <div class="flex items-center space-x-2"><span class="w-4 h-4 rounded bg-red-100 border border-red-400"></span><span>排期紧张/已满</span></div>
+          <div class="flex items-center space-x-2"><span class="w-4 h-4 rounded bg-purple-100 border border-purple-400"></span><span>正在烧制</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="tab-query" class="tab-content hidden">
+    <div class="bg-white rounded-2xl shadow-xl overflow-hidden">
+      <div class="gradient-bg ceramic-pattern px-8 py-6 text-white">
+        <h2 class="text-2xl font-bold">🔍 作品进度查询</h2>
+        <p class="text-white/80 mt-1">输入您的信息查询作品烧制进度</p>
+      </div>
+      <div class="p-8">
+        <div class="flex gap-4 mb-6 max-w-2xl">
+          <input type="text" id="queryInput" class="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent" placeholder="输入姓名或手机号查询">
+          <button onclick="queryBodies()" class="px-8 py-3 gradient-bg text-white rounded-lg hover:opacity-90 transition font-medium">查询</button>
+        </div>
+        <div id="queryResults" class="space-y-4"></div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<div id="notifModal" class="fixed inset-0 modal-overlay z-50 hidden items-center justify-center">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 max-h-[80vh] flex flex-col">
+    <div class="px-6 py-4 border-b flex items-center justify-between">
+      <h3 class="text-lg font-bold">🔔 认领提醒</h3>
+      <button onclick="closeModal('notifModal')" class="text-gray-400 hover:text-gray-600 text-2xl">×</button>
+    </div>
+    <div id="notifList" class="flex-1 overflow-y-auto p-4 space-y-3"></div>
+    <div class="px-6 py-4 border-t bg-gray-50">
+      <button onclick="markAllRead()" class="text-sm text-purple-600 hover:text-purple-800">全部标为已读</button>
+    </div>
+  </div>
+</div>
+
+<div id="dayModal" class="fixed inset-0 modal-overlay z-50 hidden items-center justify-center">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 max-h-[80vh] flex flex-col">
+    <div class="px-6 py-4 border-b flex items-center justify-between">
+      <h3 id="dayModalTitle" class="text-lg font-bold">排期详情</h3>
+      <button onclick="closeModal('dayModal')" class="text-gray-400 hover:text-gray-600 text-2xl">×</button>
+    </div>
+    <div id="dayModalContent" class="flex-1 overflow-y-auto p-6"></div>
+  </div>
+</div>
+
+<div id="toastContainer" class="fixed top-20 right-6 z-50 space-y-2"></div>
+
+<script>
+const API = 'http://localhost:8802/api';
+let currentTab = 'register';
+let calDate = new Date();
+
+flatpickr('#scheduleDate', { locale: 'zh', dateFormat: 'Y-m-d', minDate: 'today' });
+
+switchTab('register');
+
+function switchTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+  document.getElementById('tab-' + tab).classList.remove('hidden');
+  document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('bg-white/20'));
+  event && event.target && event.target.classList.add('bg-white/20');
+  if (tab === 'calendar') renderCalendar();
+  if (tab === 'query') { document.getElementById('queryInput').value = ''; document.getElementById('queryResults').innerHTML = ''; }
+}
+
+function toast(msg, type='success') {
+  const colors = { success: 'bg-green-500', error: 'bg-red-500', info: 'bg-blue-500' };
+  const el = document.createElement('div');
+  el.className = `toast ${colors[type]} text-white px-6 py-3 rounded-lg shadow-xl`;
+  el.textContent = msg;
+  document.getElementById('toastContainer').appendChild(el);
+  setTimeout(() => el.remove(), 3000);
+}
+
+document.getElementById('registerForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const data = Object.fromEntries(fd.entries());
+  if (data.weight) data.weight = parseFloat(data.weight);
+  try {
+    const res = await fetch(API + '/bodies', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+    const r = await res.json();
+    if (res.ok) {
+      toast('🎉 登记成功！我们会尽快安排烧制');
+      e.target.reset();
+    } else {
+      toast('❌ ' + (r.error || '登记失败'), 'error');
+    }
+  } catch (err) {
+    toast('❌ 网络错误，请重试', 'error');
+  }
+});
+
+async function renderCalendar() {
+  const year = calDate.getFullYear();
+  const month = calDate.getMonth();
+  document.getElementById('calMonthLabel').textContent = `${year}年${month + 1}月`;
+  const grid = document.getElementById('calendarGrid');
+  const firstDay = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const today = new Date(); today.setHours(0,0,0,0);
+
+  const startStr = `${year}-${String(month+1).padStart(2,'0')}-01`;
+  const endStr = `${year}-${String(month+1).padStart(2,'0')}-${daysInMonth}`;
+  let calData = { summary: [] };
+  try {
+    const res = await fetch(`${API}/calendar?start=${startStr}&end=${endStr}`);
+    calData = await res.json();
+  } catch(e) {}
+
+  const kilns = await fetch(API + '/kilns').then(r => r.json()).catch(() => []);
+  const totalCap = kilns.reduce((s, k) => s + k.capacity, 0) || 75;
+
+  let html = '';
+  for (let i = 0; i < firstDay; i++) html += '<div></div>';
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const thisDate = new Date(year, month, d);
+    const dayData = calData.summary.filter(s => s.date === dateStr);
+    const dayCount = dayData.reduce((s, d) => s + d.count, 0);
+    const hasFiring = dayData.some(d => d.status === 'firing');
+    const rate = totalCap > 0 ? dayCount / totalCap : 0;
+    let bgClass = 'bg-green-50 border-green-200';
+    if (hasFiring) bgClass = 'bg-purple-50 border-purple-200';
+    else if (rate > 0.7) bgClass = 'bg-red-50 border-red-200';
+    else if (rate > 0.3) bgClass = 'bg-yellow-50 border-yellow-200';
+    const isToday = thisDate.getTime() === today.getTime();
+    const isPast = thisDate < today;
+    html += `
+      <div class="cal-day border-2 ${bgClass} ${isToday ? 'cal-today' : ''} ${isPast ? 'opacity-60' : 'cursor-pointer'} rounded-lg p-2"
+           onclick="${isPast ? '' : `showDayDetail('${dateStr}')`}">
+        <div class="flex items-center justify-between mb-1">
+          <span class="text-sm font-semibold ${isToday ? 'text-blue-600' : 'text-gray-700'}">${d}</span>
+          ${dayCount > 0 ? `<span class="text-xs bg-white/80 px-2 py-0.5 rounded-full">${dayCount}件</span>` : ''}
+        </div>
+        <div class="text-xs text-gray-500">${hasFiring ? '🔥 烧制中' : (rate > 0 ? `已排 ${(rate*100).toFixed(0)}%` : '空余')}</div>
+      </div>
+    `;
+  }
+  grid.innerHTML = html;
+}
+
+function prevMonth() { calDate.setMonth(calDate.getMonth() - 1); renderCalendar(); }
+function nextMonth() { calDate.setMonth(calDate.getMonth() + 1); renderCalendar(); }
+
+async function showDayDetail(dateStr) {
+  document.getElementById('dayModalTitle').textContent = `📅 ${dateStr} 排期详情`;
+  let bodies = [], kilns = [];
+  try {
+    [bodies, kilns] = await Promise.all([
+      fetch(`${API}/bodies?schedule_date=${dateStr}`).then(r => r.json()),
+      fetch(API + '/kilns').then(r => r.json())
+    ]);
+  } catch(e) {}
+  const kilnMap = Object.fromEntries(kilns.map(k => [k.id, k]));
+  let html = '';
+  if (bodies.length === 0) {
+    html = '<div class="text-center text-gray-400 py-12"><div class="text-5xl mb-3">📭</div>当日暂无排期安排</div>';
+  } else {
+    const grouped = {};
+    bodies.forEach(b => {
+      const kid = b.kiln_id || 'unassigned';
+      if (!grouped[kid]) grouped[kid] = [];
+      grouped[kid].push(b);
+    });
+    for (const [kid, list] of Object.entries(grouped)) {
+      const k = kilnMap[kid];
+      html += `<div class="mb-6">
+        <h4 class="font-bold text-gray-800 mb-3 flex items-center space-x-2">
+          <span>${k ? '🏺 ' + k.name : '📋 待分配窑炉'}</span>
+          <span class="text-sm text-gray-500">（${list.length} 件）</span>
+        </h4>
+        <div class="space-y-2">
+          ${list.map(b => `
+            <div class="border rounded-lg p-3 hover:bg-gray-50 transition">
+              <div class="flex items-center justify-between">
+                <div>
+                  <span class="font-medium">${b.body_name}</span>
+                  <span class="ml-2 px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs">${b.glaze_color}</span>
+                </div>
+                <span class="status-badge ${statusColor(b.status)}">${statusText(b.status)}</span>
+              </div>
+              <div class="text-xs text-gray-500 mt-1">${b.customer_name} · ${b.customer_phone}${b.weight ? ` · ${b.weight}kg` : ''}</div>
+            </div>
+          `).join('')}
+        </div>
+      </div>`;
+    }
+  }
+  document.getElementById('dayModalContent').innerHTML = html;
+  openModal('dayModal');
+}
+
+function statusText(s) {
+  return { registered:'已登记', scheduled:'已排期', firing:'烧制中', ready:'待认领', claimed:'已领取', refire_needed:'需补烧' }[s] || s;
+}
+function statusColor(s) {
+  return {
+    registered: 'bg-gray-100 text-gray-700',
+    scheduled: 'bg-blue-100 text-blue-700',
+    firing: 'bg-purple-100 text-purple-700',
+    ready: 'bg-green-100 text-green-700',
+    claimed: 'bg-gray-200 text-gray-600',
+    refire_needed: 'bg-orange-100 text-orange-700'
+  }[s] || 'bg-gray-100 text-gray-700';
+}
+
+async function queryBodies() {
+  const kw = document.getElementById('queryInput').value.trim();
+  if (!kw) { toast('请输入查询关键词', 'info'); return; }
+  let all = [];
+  try { all = await fetch(API + '/bodies').then(r => r.json()); }
+  catch(e) { toast('查询失败', 'error'); return; }
+  const results = all.filter(b => b.customer_name.includes(kw) || b.customer_phone.includes(kw));
+  const container = document.getElementById('queryResults');
+  if (results.length === 0) {
+    container.innerHTML = '<div class="text-center text-gray-400 py-12"><div class="text-5xl mb-3">🔍</div>未找到相关记录，请检查输入信息</div>';
+    return;
+  }
+  container.innerHTML = `
+    <div class="mb-4 text-sm text-gray-600">共找到 <b>${results.length}</b> 条记录</div>
+    ${results.map(b => {
+      const steps = [
+        { key: 'registered', label: '已登记', icon: '📝', done: true },
+        { key: 'scheduled', label: '已排期', icon: '📅', done: ['scheduled','firing','ready','claimed'].includes(b.status) },
+        { key: 'firing', label: '烧制中', icon: '🔥', done: ['firing','ready','claimed'].includes(b.status) },
+        { key: 'ready', label: '待认领', icon: '✅', done: ['ready','claimed'].includes(b.status) },
+        { key: 'claimed', label: '已领取', icon: '🎁', done: b.status === 'claimed' }
+      ];
+      return `
+        <div class="border-2 rounded-xl p-6 hover:shadow-md transition">
+          <div class="flex items-start justify-between mb-4">
+            <div>
+              <h4 class="text-xl font-bold text-gray-800">${b.body_name} <span class="ml-2 text-sm font-normal text-purple-600">[${b.glaze_color}]</span></h4>
+              <p class="text-sm text-gray-500 mt-1">登记号 #${b.id} · ${b.registered_at?.split('T')[0] || ''}</p>
+            </div>
+            <span class="status-badge ${statusColor(b.status)} text-base px-4 py-1">${statusText(b.status)}</span>
+          </div>
+          <div class="flex items-center mb-4">
+            ${steps.map((s, i) => `
+              <div class="flex items-center flex-1">
+                <div class="flex flex-col items-center flex-1">
+                  <div class="w-12 h-12 rounded-full flex items-center justify-center text-xl ${s.done ? 'bg-purple-100 text-purple-600' : 'bg-gray-100 text-gray-400'} ${b.status === s.key ? 'ring-4 ring-purple-200' : ''}">${s.icon}</div>
+                  <span class="text-xs mt-1 ${s.done ? 'text-purple-600 font-medium' : 'text-gray-400'}">${s.label}</span>
+                </div>
+                ${i < steps.length - 1 ? `<div class="h-1 flex-1 mx-1 rounded ${s.done && steps[i+1].done ? 'bg-purple-300' : 'bg-gray-200'}"></div>` : ''}
+              </div>
+            `).join('')}
+          </div>
+          <div class="grid grid-cols-3 gap-4 text-sm bg-gray-50 rounded-lg p-4">
+            <div><span class="text-gray-500">顾客：</span><span class="font-medium">${b.customer_name}</span></div>
+            <div><span class="text-gray-500">电话：</span><span class="font-medium">${b.customer_phone}</span></div>
+            <div><span class="text-gray-500">重量：</span><span class="font-medium">${b.weight || '-'} kg</span></div>
+            <div class="col-span-3"><span class="text-gray-500">排期日期：</span><span class="font-medium">${b.schedule_date || '待安排'}</span></div>
+            ${b.notes ? `<div class="col-span-3"><span class="text-gray-500">备注：</span><span class="font-medium">${b.notes}</span></div>` : ''}
+          </div>
+          ${b.status === 'ready' ? `
+            <div class="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg flex items-center justify-between">
+              <div><b class="text-green-700">🎉 作品已烧制完成！</b><span class="text-green-600 ml-2">请携带有效证件到工坊领取</span></div>
+              <button onclick="claimBody(${b.id})" class="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-medium">确认领取</button>
+            </div>
+          ` : ''}
+        </div>
+      `;
+    }).join('')}
+  `;
+}
+
+async function claimBody(id) {
+  if (!confirm('确认已领取作品吗？')) return;
+  try {
+    await fetch(`${API}/bodies/${id}/claim`, { method: 'POST' });
+    toast('✅ 领取确认成功');
+    queryBodies();
+    loadNotifications();
+  } catch(e) { toast('操作失败', 'error'); }
+}
+
+async function showNotifications() {
+  await loadNotifications();
+  openModal('notifModal');
+}
+
+async function loadNotifications() {
+  let notifs = [];
+  try {
+    notifs = await fetch(API + '/notifications').then(r => r.json());
+  } catch(e) {}
+  const unread = notifs.filter(n => !n.is_read).length;
+  const badge = document.getElementById('notifBadge');
+  if (unread > 0) { badge.classList.remove('hidden'); badge.textContent = unread; }
+  else badge.classList.add('hidden');
+  const list = document.getElementById('notifList');
+  if (notifs.length === 0) {
+    list.innerHTML = '<div class="text-center text-gray-400 py-8">暂无提醒消息</div>';
+  } else {
+    list.innerHTML = notifs.map(n => `
+      <div class="border rounded-lg p-4 ${n.is_read ? 'bg-gray-50 opacity-70' : 'bg-blue-50'} flex items-start space-x-3">
+        <div class="text-2xl">🎁</div>
+        <div class="flex-1">
+          <div class="font-medium">${n.message}</div>
+          <div class="text-xs text-gray-500 mt-1">${n.body_name} · ${n.customer_name} · ${n.customer_phone}</div>
+          <div class="text-xs text-gray-400 mt-1">${n.created_at?.replace('T',' ')}</div>
+        </div>
+        ${!n.is_read ? `<button onclick="markRead(${n.id})" class="text-xs text-blue-600 hover:text-blue-800">标为已读</button>` : ''}
+      </div>
+    `).join('');
+  }
+}
+
+async function markRead(id) {
+  try { await fetch(`${API}/notifications/${id}/read`, { method: 'POST' }); loadNotifications(); } catch(e) {}
+}
+async function markAllRead() {
+  try { await fetch(API + '/notifications/read-all', { method: 'POST' }); loadNotifications(); } catch(e) {}
+}
+
+function openModal(id) { const m = document.getElementById(id); m.classList.remove('hidden'); m.classList.add('flex'); }
+function closeModal(id) { const m = document.getElementById(id); m.classList.add('hidden'); m.classList.remove('flex'); }
+
+setInterval(loadNotifications, 30000);
+loadNotifications();
+</script>
+</body>
+</html>

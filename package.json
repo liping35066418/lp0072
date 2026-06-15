@@ -1,0 +1,18 @@
+{
+  "name": "pottery-kiln-scheduler",
+  "version": "1.0.0",
+  "description": "陶土工坊烧制调度管理系统",
+  "main": "server/index.js",
+  "scripts": {
+    "install:all": "npm install && cd server && npm install && cd ../client && npm install",
+    "server": "cd server && npm start",
+    "client": "cd client && npm start",
+    "dev": "concurrently \"npm run server\" \"npm run client\""
+  },
+  "keywords": ["pottery", "kiln", "scheduler"],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
