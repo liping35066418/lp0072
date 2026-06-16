@@ -148,7 +148,7 @@ app.post('/api/bodies/reorder', (req, res) => {
     return res.status(400).json({ error: '参数错误' });
   }
   const tx = db.transaction(() => {
-    const updateStmt = db.prepare('UPDATE clay_bodies SET kiln_id = ?, kiln_order = ? WHERE id = ?');
+    const updateStmt = db.prepare('UPDATE clay_bodies SET kiln_id = ?, kiln_order = ?, status = \'scheduled\' WHERE id = ?');
     items.forEach(item => {
       updateStmt.run(item.kiln_id, item.order, item.id);
     });
