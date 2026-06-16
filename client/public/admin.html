@@ -151,6 +151,12 @@
               <option value="refire_needed">需补烧</option>
             </select>
           </div>
+          <div class="flex items-center space-x-2">
+            <label class="text-sm text-slate-600">釉色：</label>
+            <select id="filterGlaze" onchange="refreshScheduler()" class="px-3 py-2 border rounded-lg text-sm">
+              <option value="">全部釉色</option>
+            </select>
+          </div>
           <input id="filterKw" type="text" placeholder="搜索姓名/电话/作品名" class="px-3 py-2 border rounded-lg text-sm" oninput="refreshScheduler()">
           <div class="ml-auto flex space-x-2">
             <button onclick="refreshScheduler()" class="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition">🔄 刷新</button>
@@ -244,6 +250,18 @@
     </section>
 
     <section id="view-stats" class="view-content hidden">
+      <div class="bg-white rounded-2xl p-4 mb-6 shadow-sm">
+        <div class="flex flex-wrap items-center gap-4">
+          <div class="flex items-center space-x-2">
+            <label class="text-sm text-slate-600">各釉色烧制频次 - 登记日期：</label>
+            <input id="statsStartDate" type="text" placeholder="开始日期" class="px-3 py-2 border rounded-lg text-sm w-36">
+            <span class="text-slate-400">至</span>
+            <input id="statsEndDate" type="text" placeholder="结束日期" class="px-3 py-2 border rounded-lg text-sm w-36">
+            <button onclick="loadStatsCharts()" class="px-4 py-2 gradient-bg text-white rounded-lg text-sm font-medium hover:opacity-90 transition">应用筛选</button>
+            <button onclick="clearStatsDateFilter()" class="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition">清除</button>
+          </div>
+        </div>
+      </div>
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
         <div class="bg-white rounded-2xl p-6 shadow-sm">
           <h3 class="font-bold text-slate-800 mb-4">各釉色烧制频次统计</h3>
@@ -385,6 +403,8 @@ let scheduledOrder = [];
 let glazeDoughnut, glazeBar, statusPie;
 
 flatpickr('#bfDate', { locale: 'zh', dateFormat: 'Y-m-d' });
+flatpickr('#statsStartDate', { locale: 'zh', dateFormat: 'Y-m-d' });
+flatpickr('#statsEndDate', { locale: 'zh', dateFormat: 'Y-m-d' });
 document.addEventListener('click', e => { if (!e.target.closest('.relative')) document.getElementById('notifDropdown')?.classList.add('hidden'); });
 
 function switchView(view) {
@@ -470,12 +490,18 @@ async function loadDashboard() {
 
 async function refreshScheduler() {
   const sf = document.getElementById('filterStatus').value;
+  const gf = document.getElementById('filterGlaze').value;
   const kw = document.getElementById('filterKw').value.trim().toLowerCase();
   scheduledOrder = [];
   try {
     const [kilns, all] = await Promise.all([fetch(API+'/kilns').then(r=>r.json()), fetch(API+'/bodies').then(r=>r.json())]);
     let pool = all.filter(b => !b.kiln_id && (b.status==='registered' || b.status==='refire_needed'));
+    const glazeSel = document.getElementById('filterGlaze');
+    const glazes = [...new Set(pool.map(b=>b.glaze_color))].sort();
+    const prevVal = gf || '';
+    glazeSel.innerHTML = '<option value="">全部釉色</option>' + glazes.map(g=>`<option value="${g}" ${g===prevVal?'selected':''}>${g}</option>`).join('');
     if (sf) pool = pool.filter(b => b.status===sf);
+    if (prevVal) pool = pool.filter(b => b.glaze_color===prevVal);
     if (kw) pool = pool.filter(b => (b.customer_name+b.customer_phone+b.body_name).toLowerCase().includes(kw));
     document.getElementById('poolCount').textContent = `共 ${pool.length} 件（拖拽到右侧窑炉）`;
     document.getElementById('bodyPool').innerHTML = pool.map(b => dragHtml(b)).join('') ||
@@ -576,6 +602,7 @@ async function removeFromKiln(id) {
 
 async function assignAll(kid) {
   const sf = document.getElementById('filterStatus').value;
+  const gf = document.getElementById('filterGlaze').value;
   const kw = document.getElementById('filterKw').value.trim().toLowerCase();
   try {
     const kilns = await fetch(API+'/kilns').then(r=>r.json());
@@ -583,7 +610,14 @@ async function assignAll(kid) {
     const k = kilns.find(x=>x.id===kid);
     let pool = bodies.filter(b=>!b.kiln_id && (b.status==='registered'||b.status==='refire_needed'));
     if (sf) pool = pool.filter(b=>b.status===sf);
+    if (gf) pool = pool.filter(b=>b.glaze_color===gf);
     if (kw) pool = pool.filter(b=>(b.customer_name+b.customer_phone+b.body_name).toLowerCase().includes(kw));
+    pool.sort((a,b) => {
+      const da = a.schedule_date || '9999-12-31';
+      const db = b.schedule_date || '9999-12-31';
+      if (da !== db) return da.localeCompare(db);
+      return a.id - b.id;
+    });
     const cur = bodies.filter(b=>b.kiln_id===kid && (b.status==='scheduled'||b.status==='firing'));
     const avail = k.capacity - cur.length;
     if (avail<=0) { toast('窑炉已满员','warning'); return; }
@@ -834,10 +868,22 @@ async function deleteDefect(id) {
   catch(e) { toast('删除失败','error'); }
 }
 
+function clearStatsDateFilter() {
+  document.getElementById('statsStartDate').value = '';
+  document.getElementById('statsEndDate').value = '';
+  loadStatsCharts();
+}
+
 async function loadStatsCharts() {
   try {
+    const sd = document.getElementById('statsStartDate').value;
+    const ed = document.getElementById('statsEndDate').value;
+    const params = new URLSearchParams();
+    if (sd) params.append('start_date', sd);
+    if (ed) params.append('end_date', ed);
+    const qs = params.toString() ? '?' + params.toString() : '';
     const [glazeData, bodies] = await Promise.all([
-      fetch(API+'/stats/glaze-count').then(r=>r.json()),
+      fetch(API+'/stats/glaze-count'+qs).then(r=>r.json()),
       fetch(API+'/bodies').then(r=>r.json())
     ]);
 
